@@ -36,6 +36,12 @@ class Nucleus:
         nucleus.anchor_y = self.nucleus_img.height // 2
         
         new_body.visual_shape = nucleus
+        self.body = new_body
         self.env_objects.append(new_body)
         self.space.add(new_body, poly)
         return new_body
+
+    def get_center(self) -> tuple[float, float]:
+        """Gets the center of the object."""
+        return self.body.position.x, self.body.position.y
+    

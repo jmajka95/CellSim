@@ -1,10 +1,12 @@
 import pymunk
 import pyglet
 from sim_utils import get_vertices_from_img
-from solution import Solution
 import numpy as np
 from collections import defaultdict
 from ion_channel import IonChannel
+from receptor import Receptor
+from solution import Solution
+from random import randint, shuffle
 
 class Membrane:
     """Class defining the membrane of a cell."""
@@ -14,12 +16,23 @@ class Membrane:
     lipid_img.anchor_x = lipid_img.width // 2 # Tells pyglet how to anchor the image for correct visualization
     lipid_img.anchor_y = lipid_img.height // 2
 
+    # Dictionary for classifying spring connections
+    spring_anchor_dict = {
+        "lipid": [(0,10), (0,-10)],
+        "open": [(0,5),(0,-5)],
+        "closed": [(0,5),(0,-5)],
+        "A": [(0,-12),(0,-15)], # TODO: Any additional optimizations?
+        "B": [(0,-12),(0,-15)]
+    }
+
     def __init__(
         self,
         space, # For interfacing with the simulation
         env_objects,
         object_batch,
-        solution,
+        solution: Solution,
+        channels_to_initialize: list[str],
+        receptors_to_initialize: list[str],
         stiffness = 25, # For adjusting DampedSpring params
         rest_length = 5, # For adjusting DampedSpring params
         damping = 10, # For adjusting DampedSpring params
@@ -35,103 +48,116 @@ class Membrane:
         self.outer_lipids = []
         self.env_objects = env_objects
         self.object_batch = object_batch
-        self.solution: Solution = solution
+        self.solution = solution
         self.inner_molarity = inner_molarity
         self.is_burst = False
+        self.is_alive = True # TODO: Implement something related to this
         self.constraints = []
         self.constraints_dict = defaultdict(list)
         self.lipid_constraints_dict = defaultdict(list)
         self.lipids_dict = defaultdict(list)
         self.radius = self.lipids_per_layer * 1.125
+        self.channels_to_initialize = channels_to_initialize
+        self.receptors_to_initialize = receptors_to_initialize
+        self.receptors = {}
+        self.ion_channels = {}
 
     def spawn_lipid_membrane(self, x, y) -> tuple[list[pymunk.Body], list[pymunk.Body]]:
         """Spawns a lipid membrane."""
         current_inner_lipids = []
         current_outer_lipids = []
 
+        # Generate positions to add non-lipids to
+        non_lipids: list[str] = []
+        for channel in self.channels_to_initialize:
+            non_lipids.extend([channel]*3)
+        for receptor in self.receptors_to_initialize:
+            non_lipids.extend([receptor]*3)
+        shuffle(non_lipids)
+
+        positions = self._generate_random_position_dict(num_objs=len(non_lipids))
+
+        variant_maps = { # contains (constructor_img_value, distance_scaling_value) as values
+            "open" : ("open", 0.01),
+            "closed": ("closed", 0.01),
+            "A" : ("A", 0.07),
+            "B" : ("B", 0.07)
+        }
+
+        # Constructor map
+        constructors = {
+            "open": IonChannel,
+            "closed": IonChannel,
+            "A": Receptor,
+            "B": Receptor,
+        }
+
+        iter_count = 0
+        objects: list[str] = []
+
         for i in range(self.lipids_per_layer):
             angle = (i / self.lipids_per_layer) * 2 * np.pi
-            if i % 100 != 0: # Put channels every 100 lipids
-                lipid = self._spawn_lipid( # Inner membrane
-                    x = x + self.radius * np.sin(angle),
-                    y = y + self.radius * np.cos(angle),
-                    angle = (2 * np.pi - angle) - np.pi
-                )
-            else:
-                lipid = IonChannel(self.space, self.env_objects, self.object_batch).spawn(
-                    x = x + (self.radius + self.radius * 0.01) * np.sin(angle), # 0.025 is arbitrary for best visualization
-                    y = y + (self.radius + self.radius * 0.01) * np.cos(angle),
+            if i in positions:
+                variant = non_lipids[iter_count]
+                obj = constructors[variant](self.space, self.env_objects, self.object_batch, variant_maps[variant][0])
+                inner_obj = obj.spawn(
+                    x = x + (self.radius + self.radius * variant_maps[variant][1]) * np.sin(angle),
+                    y = y + (self.radius + self.radius * variant_maps[variant][1]) * np.cos(angle),
                     angle = 2 * np.pi - angle
                 )
-        
-            self.inner_lipids.append(lipid)
-            current_inner_lipids.append(lipid)
-
-        # Spawn lipids
-        for i in range(self.lipids_per_layer):
-            angle = (i / self.lipids_per_layer) * 2 * np.pi
-            if i % 100 != 0: 
-                lipid = self._spawn_lipid( # Outer membrane
-                    x = x + (self.radius + self.radius * 0.05) * np.sin(angle), # 0.05 is arbitrary for best visualization
+                if variant in Receptor.receptors:
+                    self.receptors[obj] = variant
+                elif variant in IonChannel.states:
+                    self.ion_channels[obj] = variant
+                outer_obj = inner_obj
+                objects.append(variant)
+                iter_count += 1
+            else:
+                inner_obj = self._spawn_lipid(
+                    x = x + self.radius * np.sin(angle),
+                    y = y + self.radius * np.cos(angle),
+                    angle = np.pi - angle
+                )
+                outer_obj = self._spawn_lipid(
+                    x = x + (self.radius + self.radius * 0.05) * np.sin(angle),
                     y = y + (self.radius + self.radius * 0.05) * np.cos(angle),
                     angle = 2 * np.pi - angle
                 )
-            else:
-                lipid = self.inner_lipids[i]
-        
-            self.outer_lipids.append(lipid)
-            current_outer_lipids.append(lipid)
+                objects.append("lipid")
 
-        # Connect all lipids
-        for i in range(len(current_outer_lipids)):
-            if i == 0:
-                c1 = pymunk.DampedSpring(current_outer_lipids[0], current_outer_lipids[-1], (0, 10), (0, 10), rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
-                c2 = pymunk.DampedSpring(current_outer_lipids[0], current_outer_lipids[-1], (0, -10), (0, -10), rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
-                self.space.add(c1, c2)
-                self.constraints.extend([c1, c2])
+            self.inner_lipids.append(inner_obj)
+            current_inner_lipids.append(inner_obj)
+            self.outer_lipids.append(outer_obj)
+            current_outer_lipids.append(outer_obj)
 
-                self.constraints_dict[c1] = [current_outer_lipids[0]]
-                self.constraints_dict[c2] = [current_outer_lipids[0]]
-                self.lipids_dict[current_outer_lipids[0]].append(current_outer_lipids[-1])
-                self.lipid_constraints_dict[current_outer_lipids[0]].extend([c1, c2])
+        # Generate constraints and add to constraints dictionary
+        for i in range(self.lipids_per_layer):
+            # Outer constraints
+            c1 = pymunk.DampedSpring(current_outer_lipids[i], current_outer_lipids[i-1], self.spring_anchor_dict[objects[i]][0], self.spring_anchor_dict[objects[i-1]][0], rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
+            c2 = pymunk.DampedSpring(current_outer_lipids[i], current_outer_lipids[i-1], self.spring_anchor_dict[objects[i]][1], self.spring_anchor_dict[objects[i-1]][1], rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
 
-                c1 = pymunk.DampedSpring(current_inner_lipids[0], current_inner_lipids[-1], (0, 10), (0, 10), rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
-                c2 = pymunk.DampedSpring(current_inner_lipids[0], current_inner_lipids[-1], (0, -10), (0, -10), rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
-                self.space.add(c1, c2)
-                self.constraints.extend([c1, c2])
+            # Inner constraints
+            c3 = pymunk.DampedSpring(current_inner_lipids[i], current_inner_lipids[i-1], self.spring_anchor_dict[objects[i]][0], self.spring_anchor_dict[objects[i-1]][0], rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
+            c4 = pymunk.DampedSpring(current_inner_lipids[i], current_inner_lipids[i-1], self.spring_anchor_dict[objects[i]][1], self.spring_anchor_dict[objects[i-1]][1], rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
 
-                self.constraints_dict[c1] = [current_inner_lipids[0]]
-                self.constraints_dict[c2] = [current_inner_lipids[0]]
-                self.lipids_dict[current_inner_lipids[0]].append(current_inner_lipids[-1])
-                self.lipid_constraints_dict[current_inner_lipids[0]].extend([c1, c2])
-            else:
-                c1 = pymunk.DampedSpring(current_outer_lipids[i], current_outer_lipids[i-1], (0, 10), (0, 10), rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
-                c2 = pymunk.DampedSpring(current_outer_lipids[i], current_outer_lipids[i-1], (0, -10), (0, -10), rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
-                self.space.add(c1, c2)
-                self.constraints.extend([c1, c2])
+            self.space.add(c1, c2, c3, c4)
+            self.constraints.extend([c1, c2, c3, c4])
 
-                self.constraints_dict[c1] = [current_outer_lipids[i]]
-                self.constraints_dict[c2] = [current_outer_lipids[i]]
-                self.lipids_dict[current_outer_lipids[i]].append(current_outer_lipids[i-1])
-                self.lipid_constraints_dict[current_outer_lipids[i]].extend([c1, c2])
+            self.constraints_dict[c1] = [current_outer_lipids[i]]
+            self.constraints_dict[c2] = [current_outer_lipids[i]]
+            self.constraints_dict[c3] = [current_inner_lipids[i]]
+            self.constraints_dict[c4] = [current_inner_lipids[i]]
+            self.lipid_constraints_dict[current_outer_lipids[i]].extend([c1, c2])
+            self.lipid_constraints_dict[current_inner_lipids[i]].extend([c3, c4])
+            self.lipids_dict[current_outer_lipids[i]].append(current_outer_lipids[i-1])
+            self.lipids_dict[current_inner_lipids[i]].append(current_inner_lipids[i-1])
 
-                c1 = pymunk.DampedSpring(current_inner_lipids[i], current_inner_lipids[i-1], (0, 10), (0, 10), rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
-                c2 = pymunk.DampedSpring(current_inner_lipids[i], current_inner_lipids[i-1], (0, -10), (0, -10), rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
-                self.space.add(c1, c2)
-                self.constraints.extend([c1, c2])
-
-                self.constraints_dict[c1] = [current_inner_lipids[i]]
-                self.constraints_dict[c2] = [current_inner_lipids[i]]
-                self.lipids_dict[current_inner_lipids[i]].append(current_inner_lipids[i-1])
-                self.lipid_constraints_dict[current_inner_lipids[i]].extend([c1, c2])
-
-            # Add spring between inner and outer
-            if i % 100 != 0:
-                c1 = pymunk.DampedSpring(current_outer_lipids[i], current_inner_lipids[i], (0, -5), (0, -5), rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
-                self.space.add(c1)
-                self.constraints.append(c1)
-                self.constraints_dict[c1] = [current_outer_lipids[i]]
-
+            # Contraints between lipids
+            if objects[i] == "lipid":
+                c5 = pymunk.DampedSpring(current_outer_lipids[i], current_inner_lipids[i], (0, -5), (0, -5), rest_length=self.rest_length, stiffness=self.stiffness, damping=self.damping)
+                self.space.add(c5)
+                self.constraints.append(c5)
+                self.constraints_dict[c5] = [current_outer_lipids[i]]
                 self.lipids_dict[current_outer_lipids[i]].append(current_inner_lipids[i])
                 self.lipids_dict[current_inner_lipids[i]].append(current_outer_lipids[i])
 
@@ -178,19 +204,19 @@ class Membrane:
         NOTE: k is arbitrary. Adjust as needed for realism
         A difference of 0.2658M should lyse cells (red blood cells)"""
         
-        k: int = 24500000
+        k: int = 27500000
         return (self.solution.molarity - self.inner_molarity) * k / self._get_membrane_area()
     
     def apply_osmotic_forces(self) -> None:
         """Applies osmotic forces to lipids of the membrane."""
 
-        print("OSMOTIC PRESSURE: ", self.osmotic_pressure)
+        self.osmotic_pressure = self._calc_osmotic_pressure() # Update osmotic pressure
 
         if not self.is_burst:
             for lipid in self.inner_lipids:
                 lipid.apply_force_at_local_point((0, self.osmotic_pressure), (0, 0))
 
-            if self._get_membrane_area() >= 1.5 * self.resting_area:
+            if self._get_membrane_area() >= 4/3 * self.resting_area: # TODO: Is there a way to more reliably modulate this?
                 self.is_burst = True
 
                 # Break membrane at point of highest stress
@@ -219,5 +245,25 @@ class Membrane:
             self.osmotic_pressure *= 0.90
             for lipid in self.inner_lipids:
                 lipid.apply_force_at_local_point((0, self.osmotic_pressure), (0, 0))
+
+    def _generate_random_position_dict(self, num_objs: int) -> list[int]:
+        """Generates a dictionary containing random positioning for membrane components
+        like channels and receptors."""
+
+        total_members = self.lipids_per_layer
+        used_values: list[int] = []
+
+        for i in range(num_objs):
+            val = randint(0, total_members)
+            while any(abs(val - num) <= 5 for num in used_values) or \
+            any(abs(val - num) == self.lipids_per_layer for num in used_values): # 5 is arbitrary
+                val = randint(0, total_members)
+            used_values.append(val)
+
+        return sorted(used_values)
+    
+    def get_center(self) -> tuple[float, float]:
+        """Returns the location of the center of the object as a tuple (x, y)"""
+        return self.inner_lipids[0].position.x, self.inner_lipids[0].position.y - self.radius
 
     # TODO: Phagocytosis / merging membranes together should be possible

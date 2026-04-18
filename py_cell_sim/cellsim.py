@@ -11,59 +11,60 @@ import numpy as np
 import sys
 import json
 
-from membrane import Membrane
-from nucleus import Nucleus
-from rough_er import RoughER
+from ligand import Ligand
+from receptor import Receptor
 from solution import Solution
+from receptor import Receptor
+from ion_channel import IonChannel
 from cell import Cell
-from sim_utils import apply_brownian_motion
+from sim_utils import apply_brownian_motion, generate_border
 
 
-# TODO:
-# 1. Cell cycle simulation?
-# IDEA: Native, simple genome that confers specific traits that can be randomly mutated and selected on based on the environment (Steve's model thing he shared: is that worth using?)
-# ATP --> lipids grow and bud off each other --> cell divides at some point
-# 2. Document WORK! Make a Google Doc that can be accessed. Also push to github. Time to make this public :^)
-# 3. In line with Nick Lane, would be absolutely sick to generate a really complex simulator that could simulate Alkaline vents forming the first cells of sorts
-
-def generate_border(len, height, space, thickness, batch):
-    floor_body = pymunk.Segment(space.static_body, (0, 0), (len, 0), thickness)
-    floor_body_upper = pymunk.Segment(space.static_body, (0, height), (len, height), thickness)
-    floor_body_right = pymunk.Segment(space.static_body, (len, height), (len, 0), thickness)
-    left_wall = pymunk.Segment(space.static_body, (0, 0), (0, height), thickness)
-    floor_body.elasticity = 0.95
-    left_wall.elasticity = 0.95
-    floor_body_upper.elasticity = 0.95
-    floor_body_right.elasticity = 0.95
-    space.add(floor_body)
-    space.add(floor_body_upper)
-    space.add(floor_body_right)
-    space.add(left_wall)
-
-    line = pyglet.shapes.Line(0, 0, len, 0, thickness=thickness, batch=batch)
-    line2 = pyglet.shapes.Line(0, height, len, height, thickness=thickness, batch=batch)
-    line3 = pyglet.shapes.Line(len, height, len, 0, thickness=thickness, batch=batch)
-    line4 = pyglet.shapes.Line(0, 0, 0, height, thickness=thickness, batch=batch)
-
-    return [line, line2, line3, line4]
+"""
+TODOS:
+1. Generate documentation in Github markdown
+2. Allow movement of cells in game
+3. ATP from mitochondria
+4. Cell energy and death
+5. Sounds?
+7. Modulating Kd via tunable param for force generated b/w receptor and ligand (also config-worthy)
+8. Make Git public
+9. Cell cycle simulation? [ATP --> lipids grow and bud off each other --> cell divides at some point] like mitosis. Could just have another cell pop next to it.
+10. Native, simple genome that confers specific traits that can be randomly mutated and selected on based on the environment (Steve's model thing he shared: is that worth using?)
+11. Idea of cells growing by getting larger via adding more lipids to their membrane in a random spot
+12. For player moving cell, could generate some kind of force outward and in one direction? Then could also have cell movement mimick this in some way
+13. X, Y gravity as part of config?
+14. Receptor image editor? Like interactive, can draw, etc.
+15. Y2H/M2H system simulations or synthetic gPCR readout systems - binding leads to release 
+"""
 
 # User-config (json/yaml?)
 env_settings = {
     "camera_mode": True,
     "setup mode": True, # For modulating config
+    "Ligand A" : False,
+    "Ligand B" : False,
     "Solution Molarity": [0.15, 0.15, 0, 0], # Defaults to 0.15M Na, 0.15M Cl, 0M K, 0M, Ca
     "pH": 7.0,
     "x_gravity": 0,
     "y_gravity": 0,
     "height": 1000,
     "width": 1800,
-    "damping": 0.85
+    "damping": 0.85,
+    "channels": [], # For saving channels to use
+    "receptors" : [], # For saving receptors to use
+    "receptor_kds" : {} # For saving receptor kds for interaction strength
 }
 
 env_objects = []
-membranes = []
+cells = []
+ligands = {
+    "A": [],
+    "B": []
+}
+receptors = {}
+channels = {}
 
-# pyglet
 def main():
     if len(sys.argv) < 2:
         print("Usage: python cellsim.py <config json file>")
@@ -72,12 +73,27 @@ def main():
     # Load config file
     with open(sys.argv[1], "r") as f:
         config_file = json.load(f)
+            
+    # Validate channels and receptors
+    if config_file["channels"]:
+        if not all(channel in IonChannel.states for channel in config_file["channels"]):
+            raise ValueError(f"Invalid channel provided. Must be one of the following: {IonChannel.states}")
+    if config_file["receptors"]:
+        if not all(receptor in Receptor.receptors for receptor in config_file["receptors"]):
+            raise ValueError(f"Invalid receptor provided. Must be one of the following: {Receptor.receptors}")
+
+    if config_file["receptor_kds"]:
+        if not all(key in Receptor.receptors for key in config_file["receptor_kds"].keys()):
+            raise ValueError(f"Must use one of the following valid receptors as keys: {Receptor.receptors}")
 
     # Set up config
     env_settings["Solution Molarity"] = config_file["molarity"]
     env_settings["height"] = config_file["height"]
     env_settings["width"] = config_file["width"]
     env_settings["pH"] = config_file["pH"]
+    env_settings["channels"] = config_file["channels"]
+    env_settings["receptors"] = config_file["receptors"]
+    env_settings["receptor_kds"] = config_file["receptor_kds"]
 
     window = pyglet.window.Window(1260, 720, "CellSim Testing", resizable=False)
     draw_options = pymunk.pyglet_util.DrawOptions()
@@ -90,12 +106,6 @@ def main():
     # GUI for initialization
     frame = gui.Frame(window, order=4)
 
-    def update_field(text):
-        try:
-            text_value = float(text)
-        except ValueError:
-            print("Invalid input! Please enter a number.")
-
     # Add this near your gui_label
     bg_rect = pyglet.shapes.Rectangle(1000, 450, 475, 500, color=(40, 40, 40), batch=gui_batch)
     gui_label = pyglet.text.Label("CellSim", x=1050, y=850, font_size=40, batch=gui_batch)
@@ -104,10 +114,14 @@ def main():
     width_field = gui.TextEntry(f"Width: {env_settings["width"]}", x=1050, y=725, width=300, batch=gui_batch)
     solution_field = gui.TextEntry(f"Solution Molarity: {env_settings["Solution Molarity"]}", x=1050, y=700, width=300, batch=gui_batch)
     ph_field = gui.TextEntry(f"Solution pH: {env_settings["pH"]}", x=1050, y=675, width=300, batch=gui_batch)
+    channel_field = gui.TextEntry(f"Channels: {env_settings["channels"]}", x=1050, y=650, width=300, batch=gui_batch)
+    receptor_field = gui.TextEntry(f"Receptors: {env_settings["receptors"]}", x=1050, y=625, width=300, batch=gui_batch)
     frame.add_widget(height_field)
     frame.add_widget(width_field)
     frame.add_widget(solution_field)
     frame.add_widget(ph_field)
+    frame.add_widget(channel_field)
+    frame.add_widget(receptor_field)
 
     start_button = Button(1050, 525, 200, 40, "START")
 
@@ -144,11 +158,14 @@ def main():
     cl_plus_button = Button(310, 800, 40, 40, "+", font_size=18)
     cl_minus_button = Button(360, 800, 40, 40, "-", font_size=18)
 
+    ligand_a_button = Button(50, 550, 200, 40, "Ligand A", font_size=18)
+    ligand_b_button = Button(50, 500, 200, 40, "Ligand B", font_size=18)
+
     lipid_counter = pyglet.text.Label(
         text="Total Objects: 0",
         font_size=15,
         x=50,
-        y=500,
+        y=250,
         color=(255,255,255,255)
     )
 
@@ -156,18 +173,30 @@ def main():
         text="Camera Mode: On",
         font_size=15,
         x=50,
-        y=450,
+        y=200,
+        color=(255,255,255,255)
+    )
+
+    ligand_mode_text = pyglet.text.Label(
+        text="Ligand Mode: Off",
+        font_size=15,
+        x=50,
+        y=300,
         color=(255,255,255,255)
     )
 
     def update(dt):
-        # apply_dipole_forces(boxes) # Optional for now
         apply_brownian_motion(env_objects)
         solution.change_solution(*env_settings["Solution Molarity"])
 
-        if membranes:
-            for membrane in membranes:
-                membrane.apply_osmotic_forces()
+        if receptors:
+            for rec in receptors.keys():
+                rec.calc_ligand_forces(ligands, env_settings["receptor_kds"][receptors[rec]])
+
+        if cells:
+            for cell in cells:
+                cell.membrane.apply_osmotic_forces()
+                # TODO: Here, Increment/Decrement energy
 
         substeps = 2
         for _ in range(substeps): # Substeps help micro-updates occur
@@ -204,14 +233,18 @@ def main():
             cl_plus_button.draw()
             cl_minus_button.draw()
 
+            ligand_a_button.draw()
+            ligand_b_button.draw()
+
             lipid_counter.draw()
             camera_mode_text.draw()
+            ligand_mode_text.draw()
             fps_display.draw()
 
-            for box in env_objects:
-                box.visual_shape.x = box.position.x
-                box.visual_shape.y = box.position.y
-                box.visual_shape.rotation = -math.degrees(box.angle)
+            for obj in env_objects:
+                obj.visual_shape.x = obj.position.x
+                obj.visual_shape.y = obj.position.y
+                obj.visual_shape.rotation = -math.degrees(obj.angle)
 
             lipid_counter.text = f"Total Objects: {len(env_objects)}"
             na_counter.label.text = f"{abs(env_settings["Solution Molarity"][0]):.2f}"
@@ -223,6 +256,13 @@ def main():
                 camera_mode_text.text = "Camera Mode: On"
             else:
                 camera_mode_text.text = "Camera Mode: Off"
+
+            if env_settings["Ligand A"]:
+                ligand_mode_text.text = "Ligand Mode: A"
+            elif env_settings["Ligand B"]:
+                ligand_mode_text.text = "Ligand Mode: B"
+            else:
+                ligand_mode_text.text = "Ligand Mode: Off"
         else:
             gui_batch.draw()
             start_button.draw()
@@ -244,7 +284,7 @@ def main():
     def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
         if not env_settings["setup mode"]:
             camera.position = [
-                camera.position[0] - dx, 
+                camera.position[0] - dx, # TODO: Update to make faster and smoother
                 camera.position[1] - dy
             ]
 
@@ -253,6 +293,10 @@ def main():
         if not env_settings["setup mode"]:
             if camera_button.is_clicked(x, y):
                 env_settings["camera_mode"] = not env_settings["camera_mode"]
+                if env_settings["Ligand A"]:
+                    env_settings["Ligand A"] = not env_settings["Ligand A"]
+                if env_settings["Ligand B"]:
+                    env_settings["Ligand B"] = not env_settings["Ligand B"]
             elif na_plus_button.is_clicked(x, y):
                 env_settings["Solution Molarity"][0] += 0.01
             elif na_minus_button.is_clicked(x, y):
@@ -273,13 +317,37 @@ def main():
             elif cl_minus_button.is_clicked(x, y):
                 if env_settings["Solution Molarity"][3] > 0:
                     env_settings["Solution Molarity"][3] -= 0.01
+            elif ligand_a_button.is_clicked(x, y):
+                env_settings["Ligand A"] = not env_settings["Ligand A"]
+                if env_settings["camera_mode"]:
+                    env_settings["camera_mode"] = not env_settings["camera_mode"]
+                if env_settings["Ligand B"]:
+                    env_settings["Ligand B"] = not env_settings["Ligand B"]
+            elif ligand_b_button.is_clicked(x, y):
+                env_settings["Ligand B"] = not env_settings["Ligand B"]
+                if env_settings["camera_mode"]:
+                    env_settings["camera_mode"] = not env_settings["camera_mode"]
+                if env_settings["Ligand A"]:
+                    env_settings["Ligand A"] = not env_settings["Ligand A"]
             else:
                 world_coords = camera.screen_to_world(x, y)
                 if not env_settings["camera_mode"]:
                     if world_coords[0] >= 0 and world_coords[0] <= env_settings["width"] \
                     and world_coords[1] >= 0 and world_coords[1] <= env_settings["height"]:
-                        cell = Cell(space, env_objects, object_batch, solution).spawn(world_coords[0], world_coords[1])
-                        membranes.append(cell.membrane)
+                        if not env_settings["Ligand A"] and not env_settings["Ligand B"]:
+                            cell = Cell(
+                                space, env_objects, object_batch, solution, 7.0, 100,
+                                env_settings["channels"], env_settings["receptors"]
+                            ).spawn(world_coords[0], world_coords[1])
+                            cells.append(cell)
+                            receptors.update(cell.membrane.receptors)
+                            channels.update(cell.membrane.ion_channels)
+                        elif env_settings["Ligand A"]:
+                            ligand = Ligand(space, env_objects, object_batch, "A").spawn(world_coords[0], world_coords[1])
+                            ligands["A"].append(ligand)
+                        else:
+                            ligand = Ligand(space, env_objects, object_batch, "B").spawn(world_coords[0], world_coords[1])
+                            ligands["B"].append(ligand)
         else:
             if start_button.is_clicked(x, y):
                 env_settings["setup mode"] = not env_settings["setup mode"]
@@ -301,67 +369,8 @@ def main():
                 for b in list(space.bodies):
                     space.remove(b)
 
-    pyglet.clock.schedule_interval(update, 1/30)
+    pyglet.clock.schedule_interval(update, 1/30) # 30 FPS
     pyglet.app.run()
 
 if __name__ == "__main__":
     main()
-
-# def apply_forces(space):
-    #     """Applies forces to objects in the environment."""
-    #     max_dist = 200
-    #     strength = 5000
-    #     if len(boxes) < 2:
-    #         return
-        
-    #     pos = np.array([b.position for b in boxes])
-
-    #     diff = pos[:, np.newaxis, :] - pos[np.newaxis, :, :]
-    #     dist_sq = np.sum(diff**2, axis=-1)
-
-    #     mask = (dist_sq > 25) & (dist_sq < max_dist**2)
-
-    #     safe_dist_sq = np.where(mask, dist_sq, 1.0)
-    #     inv_dist = np.where(mask, 1.0 / np.sqrt(safe_dist_sq), 0.0)
-    #     force_mag = np.where(mask, strength / (dist_sq + 100), 0.0)
-    #     combined_mag = -force_mag * inv_dist
-
-    #     total_forces = np.sum(diff * combined_mag[..., np.newaxis], axis=1)
-
-    #     for i, body in enumerate(boxes):
-    #         body.apply_force_at_world_point(tuple(total_forces[i]), body.position)
-
-# # TODO: Is this useful?
-# def apply_dipole_forces(boxes, strength=100, pole_offset=15):
-#     """Function for applying forces like dipoles"""
-#     if len(boxes) < 2: 
-#         return
-    
-#     pos = np.fromiter((c for b in boxes for c in b.position), dtype=float).reshape(-1, 2)
-#     angles = np.array([b.angle for b in boxes])
-
-#     dir_vectors = np.column_stack([np.cos(angles + np.pi/2), np.sin(angles + np.pi/2)])
-#     top_poles = pos + dir_vectors * pole_offset
-#     bottom_poles = pos - dir_vectors * pole_offset
-
-#     def get_force(p1, p2, is_attracted):
-#         diff = p2[:, np.newaxis, :] - p1[np.newaxis, :, :]
-#         dist_sq = np.sum(diff**2, axis=-1)
-
-#         mask = (dist_sq > 10) & (dist_sq < 1000)
-#         safe_dist_sq = np.where(mask, dist_sq, 1.0)
-
-#         softening = 1000.0
-#         mag = strength / (safe_dist_sq * np.sqrt(safe_dist_sq) + softening)
-#         if not is_attracted:
-#             mag *= -1
-
-#         force_vecs = diff * (np.where(mask, mag, 0.0)[..., np.newaxis])
-#         return np.sum(force_vecs, axis=1)
-
-#     f_top = get_force(top_poles, top_poles, True) #+ get_force(top_poles, bottom_poles, False)
-#     f_bottom = get_force(bottom_poles, bottom_poles, False) + get_force(bottom_poles, top_poles, False)
-
-#     for i, b in enumerate(boxes):
-#         b.apply_force_at_local_point(tuple(f_top[i]), (0, pole_offset))
-#         # b.apply_force_at_local_point(tuple(f_bottom[i]), (0, -pole_offset))

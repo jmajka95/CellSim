@@ -16,3 +16,4 @@ class Camera():
         world_x = (x / self.zoom) + self.position[0]
         world_y = (y / self.zoom) + self.position[1]
         return world_x, world_y
+    

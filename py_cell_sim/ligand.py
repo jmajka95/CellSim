@@ -1,32 +1,37 @@
-import pyglet
 import pymunk
+import pyglet
 from sim_utils import get_vertices_from_img
 
-class Mitochondrion:
-    """Class representing a mitochondrion."""
+class Ligand:
+    """Class representing a ligand. Ligands interact with receptors to affect the cell."""
+    
+    ligands = ["A", "B"]
 
-    MITO_IMG = "images/mitochondrion.png"
-    mito_img = pyglet.resource.image(MITO_IMG) # Hard-coded for now
-    mito_img.anchor_x = mito_img.width // 2
-    mito_img.anchor_y = mito_img.height // 2
+    ligand_imgs = {
+        "A" : "images/ligand_a.png",
+        "B" : "images/ligand_b.png",
+    }
 
     def __init__(
         self,
         space,
         env_objects,
         object_batch,
-        is_alive = True,
-        energy = 100
+        ligand
     ):
         self.space = space
         self.env_objects = env_objects
         self.object_batch = object_batch
-        self.is_alive = is_alive
-        self.energy = energy
+        if ligand not in self.ligands:
+            raise Exception(f"Must choose from following ligands to initialize: {self.ligands}.")
+        self.ligand = ligand
+        self.image = pyglet.resource.image(self.ligand_imgs[ligand])
+        self.image.anchor_x = self.image.width // 2
+        self.image.anchor_y = self.image.height // 2
 
     def spawn(self, x, y, angle=0, mass=1) -> pymunk.Body:
         """Spawns a nucleus."""
-        vertices = get_vertices_from_img(self.MITO_IMG, 1)
+        vertices = get_vertices_from_img(self.ligand_imgs[self.ligand], 1)
         
         moment = pymunk.moment_for_poly(mass, vertices)
         new_body = pymunk.Body(mass, moment)
@@ -35,15 +40,14 @@ class Mitochondrion:
         new_body.velocity_limit = 200
         new_body.angle = angle
         poly = pymunk.Poly(new_body, vertices)
-        mitochondrion = pyglet.sprite.Sprite(img=self.mito_img, x=x, y=y, batch=self.object_batch)
-        mitochondrion.anchor_x = self.mito_img.width // 2
-        mitochondrion.anchor_y = self.mito_img.height // 2
+        ligand = pyglet.sprite.Sprite(img=self.image, x=x, y=y, batch=self.object_batch)
+        ligand.anchor_x = self.image.width // 2
+        ligand.anchor_y = self.image.height // 2
         
-        new_body.visual_shape = mitochondrion
+        new_body.visual_shape = ligand
         self.body = new_body
         self.env_objects.append(new_body)
         self.space.add(new_body, poly)
-
         return new_body
     
     def get_center(self) -> tuple[float, float]:
