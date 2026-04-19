@@ -7,7 +7,6 @@ from pyglet.math import Mat4
 from pyglet.window import key
 from pyglet import gui
 import math
-import numpy as np
 import sys
 import json
 
