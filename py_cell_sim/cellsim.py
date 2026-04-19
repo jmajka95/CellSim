@@ -20,24 +20,6 @@ from cell import Cell
 from sim_utils import apply_brownian_motion, generate_border
 
 
-"""
-TODOS:
-1. Generate documentation in Github markdown
-2. Allow movement of cells in game
-3. ATP from mitochondria
-4. Cell energy and death
-5. Sounds?
-7. Modulating Kd via tunable param for force generated b/w receptor and ligand (also config-worthy)
-8. Make Git public
-9. Cell cycle simulation? [ATP --> lipids grow and bud off each other --> cell divides at some point] like mitosis. Could just have another cell pop next to it.
-10. Native, simple genome that confers specific traits that can be randomly mutated and selected on based on the environment (Steve's model thing he shared: is that worth using?)
-11. Idea of cells growing by getting larger via adding more lipids to their membrane in a random spot
-12. For player moving cell, could generate some kind of force outward and in one direction? Then could also have cell movement mimick this in some way
-13. X, Y gravity as part of config?
-14. Receptor image editor? Like interactive, can draw, etc.
-15. Y2H/M2H system simulations or synthetic gPCR readout systems - binding leads to release 
-"""
-
 # User-config (json/yaml?)
 env_settings = {
     "camera_mode": True,
