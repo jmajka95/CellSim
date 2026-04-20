@@ -41,5 +41,5 @@ These parameters create a tunable cellular state and environment that allow the 
 # Architecture
 Below shows a diagram of the CellSim architecture:
 <p align="center">
-    <img src="py_cell_sim/images/cellsim_diagram.png" alt="CellSim architecture" width="600">
+    <img src="py_cell_sim/images/cellsim_diagram.png" alt="CellSim architecture" width="1000">
 </p>
