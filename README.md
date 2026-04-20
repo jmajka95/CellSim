@@ -1,4 +1,8 @@
-# CellSim
+<p align="center">
+    <img src="py_cell_sim/images/CellSim_logo.png" alt="CellSim logo" width="400">
+</p>
+
+# About
 CellSim is a simple cell simulator written in Python using pymunk and pyglet. CellSim is an easy-to-use cell simulator
 that can help you better understand how cells behave, respond to their environment, and regulate themselves.
 
@@ -32,4 +36,15 @@ These will become the starting solution molarities.
 7. **receptor_kds**: A dictionary of strings as keys that are valid receptors and floats as values that are the dissociation constant (Kd) 
 of each receptor's ligand.
 
+These parameters create a tunable cellular state and environment that allow the user to customize their experience, learning how modulating different cellular or environmental parameters impacts the cell.
 
+# Architecture
+<p align="center">
+    <img src="py_cell_sim/images/cellsim_diagram.png" alt="CellSim architecture" width="400">
+</p>
+
+The CellSim architecture consists of the following:
+1. Config file
+2. Cell
+3. Solution
+4. GUI
