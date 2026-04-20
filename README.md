@@ -22,12 +22,13 @@ Where the config file must have the following json format:
 ~~~
 
 Each json parameter is defined below:\
-**height**: An integer of the height of the defined in-game window.\
-**width**: An integer of the width of the defined in-game window.\
-**Solution** Molarity: A list of four floats of the form: [Na molarity, Cl molarity, K molarity, Ca molarity]. 
+1. **height**: An integer of the height of the defined in-game window.\
+2. **width**: An integer of the width of the defined in-game window.\
+3. **Solution** Molarity: A list of four floats of the form: [Na molarity, Cl molarity, K molarity, Ca molarity]. 
 These will become the starting solution molarities.\
-**pH**: A float of the pH of the solution. The cell's pH is assumed to be ~7.0-7.2.\
-**channels**: A list of strings containing valid channels that will appear on the cell membrane. Channels can be one of ["open", "closed"].\
-**receptors**: A list of strings containing valid receptors that will appear on the cell membrane. Receptors can be one of ["A", "B"].\
-**receptor_kds**: A dictionary of strings as keys that are valid receptors and floats as values that are the dissociation constant (Kd) 
-of each receptor's ligand.\
+4. **pH**: A float of the pH of the solution. The cell's pH is assumed to be ~7.0-7.2.\
+5. **channels**: A list of strings containing valid channels that will appear on the cell membrane. Channels can be one of ["open", "closed"].\
+6. **receptors**: A list of strings containing valid receptors that will appear on the cell membrane. Receptors can be one of ["A", "B"].\
+7. **receptor_kds**: A dictionary of strings as keys that are valid receptors and floats as values that are the dissociation constant (Kd) 
+of each receptor's ligand.
+
