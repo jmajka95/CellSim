@@ -19,7 +19,7 @@ from cell import Cell
 from sim_utils import apply_brownian_motion, generate_border
 
 
-# User-config (json/yaml?)
+# User-config
 env_settings = {
     "camera_mode": True,
     "setup mode": True, # For modulating config

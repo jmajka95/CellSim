@@ -9,7 +9,7 @@ that can help you better understand how cells behave, respond to their environme
 # Usage
 To use CellSim, run the following on the command line within the py_cell_sim directory:
 ~~~
-python cellsim.py <config_file>
+python cellsim.py config.json
 ~~~
 
 Where the config file must have the following json format:
@@ -39,12 +39,7 @@ of each receptor's ligand.
 These parameters create a tunable cellular state and environment that allow the user to customize their experience, learning how modulating different cellular or environmental parameters impacts the cell.
 
 # Architecture
+Below shows a diagram of the CellSim architecture:
 <p align="center">
-    <img src="py_cell_sim/images/cellsim_diagram.png" alt="CellSim architecture" width="400">
+    <img src="py_cell_sim/images/cellsim_diagram.png" alt="CellSim architecture" width="600">
 </p>
-
-The CellSim architecture consists of the following:
-1. Config file
-2. Cell
-3. Solution
-4. GUI
