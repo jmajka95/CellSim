@@ -8,7 +8,7 @@ that can help you better understand how cells behave, respond to their environme
 
 # Usage
 To use CellSim, run the following on the command line within the py_cell_sim directory:
-~~~
+~~~bash
 python cellsim.py config.json
 ~~~
 
