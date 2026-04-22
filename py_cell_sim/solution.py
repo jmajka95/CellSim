@@ -8,7 +8,7 @@ class Solution:
     Defined by particular molarity of solutes, etc.
     """
     # TODO: This could have preset solutions that are sub-classes of this solution superclass.
-    # TODO: Something like weak ionic forces between these?
+    # TODO: A grid of specific solution/nutrient params? - Need to pass in height and width
     
     # Defining images
     SODIUM_IMG = "images/sodium.png"

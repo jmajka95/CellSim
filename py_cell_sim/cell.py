@@ -50,7 +50,7 @@ class Cell:
         self.nucleus = Nucleus(self.space, self.env_objects, self.object_batch).spawn(x, y)
         self.rough_er = RoughER(self.space, self.env_objects, self.object_batch).spawn(x, y-40)
         self.golgi = Golgi(self.space, self.env_objects, self.object_batch).spawn(x-70, y+15, angle=2*np.pi/4*3)
-        self.mitochondrion = Mitochondrion(self.space, self.env_objects, self.object_batch).spawn(x+100, y+175, angle=2*np.pi/4*3)
+        self.mitochondrion = Mitochondrion(self.space, self.env_objects, self.object_batch, self).spawn(x+100, y+175, angle=2*np.pi/4*3)
 
         # Cytoskeleton - 8 connections
         for i in range(8):
@@ -80,6 +80,13 @@ class Cell:
         return self.membrane.get_center()
     
     def update_energy(self) -> None:
-        """Updates the cell's energy based on environment."""
+        """Updates the cell's energy based on its environment."""
         raise NotImplementedError
+    
+    def check_life_status(self) -> bool:
+        """Checks whether or not the cell is still alive of the cell, 
+        switching self.is_alive to False if energy <= 0. Returns the result is a boolean."""
+
+        if self.energy <= 0: self.is_alive = False
+        return self.is_alive
     

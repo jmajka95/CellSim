@@ -39,7 +39,7 @@ of each receptor's ligand.
 These parameters create a tunable cellular state and environment that allow the user to customize their experience, learning how modulating different cellular or environmental parameters impacts the cell.
 
 # Architecture
-Below shows a diagram of the CellSim architecture:
+The following is a diagram of the CellSim architecture:
 <p align="center">
     <img src="py_cell_sim/images/cellsim_diagram.png" alt="CellSim architecture" width="1000">
 </p>

@@ -1,6 +1,7 @@
 import pyglet
 import pymunk
 from sim_utils import get_vertices_from_img
+from atp import ATP
 
 class Mitochondrion:
     """Class representing a mitochondrion."""
@@ -15,12 +16,14 @@ class Mitochondrion:
         space,
         env_objects,
         object_batch,
+        cell,
         is_alive = True,
         energy = 100
     ):
         self.space = space
         self.env_objects = env_objects
         self.object_batch = object_batch
+        self.cell = cell
         self.is_alive = is_alive
         self.energy = energy
 
@@ -45,6 +48,12 @@ class Mitochondrion:
         self.space.add(new_body, poly)
 
         return new_body
+    
+    def spawn_atp(self) -> pymunk.Body:
+        """Spawns an ATP molecule."""
+        self.cell.energy -= 1 # Decrement for energy consumption
+        x, y = self.get_center()
+        return ATP(self.space, self.env_objects, self.object_batch, "atp").spawn(x, y)
     
     def get_center(self) -> tuple[float, float]:
         """Gets the center of the object."""
