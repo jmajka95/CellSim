@@ -45,7 +45,7 @@ class Cell:
         self.receptors = receptors
 
     def spawn(self, x, y) -> Cell:
-        self.membrane = Membrane(self.space, self.env_objects, self.object_batch, self.solution, self.receptors, self.channels)
+        self.membrane = Membrane(self.space, self.env_objects, self.object_batch, self.solution, self.receptors, self.channels, self)
         self.membrane.spawn_lipid_membrane(x, y)
         self.nucleus = Nucleus(self.space, self.env_objects, self.object_batch).spawn(x, y)
         self.rough_er = RoughER(self.space, self.env_objects, self.object_batch).spawn(x, y-40)

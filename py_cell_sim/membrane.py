@@ -33,6 +33,7 @@ class Membrane:
         solution: Solution,
         channels_to_initialize: list[str],
         receptors_to_initialize: list[str],
+        cell,
         stiffness = 25, # For adjusting DampedSpring params
         rest_length = 5, # For adjusting DampedSpring params
         damping = 10, # For adjusting DampedSpring params
@@ -51,7 +52,7 @@ class Membrane:
         self.solution = solution
         self.inner_molarity = inner_molarity
         self.is_burst = False
-        self.is_alive = True # TODO: Implement something related to this
+        self.cell = cell
         self.constraints = []
         self.constraints_dict = defaultdict(list)
         self.lipid_constraints_dict = defaultdict(list)
@@ -242,6 +243,7 @@ class Membrane:
                     self.constraints.remove(constraint)
                 
         else:
+            self.cell.is_alive = False
             self.osmotic_pressure *= 0.90
             for lipid in self.inner_lipids:
                 lipid.apply_force_at_local_point((0, self.osmotic_pressure), (0, 0))
