@@ -7,7 +7,7 @@ CellSim is a simple cell simulator written in Python using pymunk and pyglet. Ce
 that can help you better understand how cells behave, respond to their environment, and regulate themselves.
 
 # Usage
-To use CellSim, run the following on the command line within the py_cell_sim directory:
+To use CellSim, run the following on the command line within the `py_cell_sim` directory:
 ~~~bash
 python cellsim.py config.json
 ~~~
